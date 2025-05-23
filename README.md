@@ -70,14 +70,20 @@ Presupuesto
 Costos de hardware, hemos puesto dos opciones:
 
 Opción 1: SSD1 con Carcasa1 (Aprox 40€).
+
 Opción 2: SSD2 con Carcasa2 (Aprox 50€).
 
 # Cronograma y Entregables 
 Línea de Tiempo 
+
 PreBriefing: 48 horas.
+
 Sprint 1: 48 horas.
+
 Sprint 2: 72 horas.
+
 Sprint 3: 55 horas.
+
 Presentación: 1/2 hora.
 
 Entregables 
