@@ -74,12 +74,11 @@ Opción 2: SSD2 con Carcasa2 (Aprox 50€).
 
 # Cronograma y Entregables 
 Línea de Tiempo 
-Fases - Duración
-PreBriefing: 48 horas
-Sprint 1: 48 horas
-Sprint 2: 72 horas
-Sprint 3: 55 horas
-Presentación: 1/2 hora
+PreBriefing: 48 horas.
+Sprint 1: 48 horas.
+Sprint 2: 72 horas.
+Sprint 3: 55 horas.
+Presentación: 1/2 hora.
 
 Entregables 
 Demostración de proyecto.
