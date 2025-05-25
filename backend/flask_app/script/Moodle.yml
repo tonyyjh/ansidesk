@@ -1,0 +1,164 @@
+---
+- name: Instalación y configuración de Moodle
+  hosts: moodle_server
+  become: yes
+  vars:
+    server_ip: localhost
+  vars_files:
+    - vars.yml
+
+  tasks:
+    - name: Actualizar lista de paquetes
+      apt:
+        update_cache: yes
+
+    - name: Instalar Apache2
+      apt:
+        name: apache2
+        state: present
+
+    - name: Iniciar y habilitar Apache2
+      systemd:
+        name: apache2
+        state: started
+        enabled: yes
+
+    - name: Instalar paquetes PHP necesarios
+      apt:
+        name:
+          - php
+          - libapache2-mod-php
+          - php-mysql
+          - php-xml
+          - php-mbstring
+          - php-curl
+          - php-zip
+          - php-gd
+          - php-intl
+          - php-soap
+          - php-json
+        state: present
+
+    - name: Configurar php.ini
+      lineinfile:
+        path: /etc/php/8.1/apache2/php.ini
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+      loop:
+        - { regexp: '^memory_limit =', line: 'memory_limit = 256M' }
+        - { regexp: '^upload_max_filesize =', line: 'upload_max_filesize = 100M' }
+        - { regexp: '^post_max_size =', line: 'post_max_size = 100M' }
+        - { regexp: '^max_execution_time =', line: 'max_execution_time = 300' }
+      notify: Reiniciar Apache2
+
+    - name: Instalar MariaDB
+      apt:
+        name:
+          - mariadb-server
+          - mariadb-client
+        state: present
+
+    - name: Iniciar y habilitar MariaDB
+      systemd:
+        name: mariadb
+        state: started
+        enabled: yes
+
+    - name: Instalar Python MySQL module
+      apt:
+        name: python3-pymysql
+        state: present
+
+    - name: Crear base de datos Moodle
+      mysql_db:
+        name: "{{ moodle_db_name }}"
+        encoding: utf8mb4
+        collation: utf8mb4_unicode_ci
+        state: present
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+      become_user: root
+      vars:
+        ansible_python_interpreter: /usr/bin/python3
+
+    - name: Crear usuario de base de datos Moodle
+      mysql_user:
+        name: "{{ moodle_db_user }}"
+        password: "{{ moodle_db_password }}"
+        priv: "{{ moodle_db_name }}.*:ALL"
+        host: localhost
+        state: present
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+      become_user: root
+      vars:
+        ansible_python_interpreter: /usr/bin/python3
+
+    - name: Descargar Moodle
+      get_url:
+        url: https://download.moodle.org/download.php/direct/stable405/moodle-4.5.3.tgz
+        dest: /tmp/moodle-4.5.3.tgz
+
+    - name: Descomprimir Moodle
+      unarchive:
+        src: /tmp/moodle-4.5.3.tgz
+        dest: /tmp
+        remote_src: yes
+
+    - name: Mover Moodle al directorio web
+      command: mv /tmp/moodle /var/www/html/moodle
+      args:
+        creates: /var/www/html/moodle
+
+    - name: Establecer permisos de Moodle
+      file:
+        path: /var/www/html/moodle
+        owner: www-data
+        group: www-data
+        mode: '0755'
+        recurse: yes
+
+    - name: Crear directorio moodledata
+      file:
+        path: /var/moodledata
+        state: directory
+        owner: www-data
+        group: www-data
+        mode: '0770'
+
+    - name: Habilitar módulo rewrite de Apache
+      apache2_module:
+        name: rewrite
+        state: present
+      notify: Reiniciar Apache2
+
+    - name: Crear configuración virtual host de Moodle
+      copy:
+        content: |
+          <VirtualHost *:80>
+              ServerName {{ server_ip }}
+              DocumentRoot /var/www/html/moodle
+
+              <Directory /var/www/html/moodle>
+                  Options +FollowSymlinks
+                  AllowOverride All
+                  Require all granted
+              </Directory>
+
+              ErrorLog ${APACHE_LOG_DIR}/moodle_error.log
+              CustomLog ${APACHE_LOG_DIR}/moodle_access.log combined
+          </VirtualHost>
+        dest: /etc/apache2/sites-available/moodle.conf
+      notify: Reiniciar Apache2
+
+    - name: Habilitar sitio Moodle
+      command: a2ensite moodle.conf
+      notify: Reiniciar Apache2
+
+    - name: Deshabilitar sitio por defecto
+      command: a2dissite 000-default.conf
+      notify: Reiniciar Apache2
+
+  handlers:
+    - name: Reiniciar Apache2
+      systemd:
+        name: apache2
+        state: restarted

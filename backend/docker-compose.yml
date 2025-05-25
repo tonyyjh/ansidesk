@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:latest
+    container_name: mysql_backend
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: ansidesk_db
+      MYSQL_USER: alumne
+      MYSQL_PASSWORD: alumne
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: phpmyadmin_backend
+    restart: always
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "8081:80"
+
+  flask_app:
+    build: ./flask_app
+    container_name: flask_backend
+    restart: always
+    environment:
+      - FLASK_ENV=development
+      - FLASK_APP=app.py
+      - PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin
+    volumes:
+      - ./flask_app:/app 
+      - ./flask_app/script:/app/script
+      - /flask_app/tmp:/app/tmp 
+    ports:
+      - "5001:5000"
+    depends_on:
+      - mysql
+    command: gunicorn -w 4 -b 0.0.0.0:5000 app:app --reload
+
+volumes:
+  mysql_data:

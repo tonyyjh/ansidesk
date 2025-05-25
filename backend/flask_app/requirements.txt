@@ -1,0 +1,13 @@
+Flask
+gunicorn
+flask-mysqldb
+flask-cors
+proxmoxer
+pyjwt
+flask-jwt-extended
+itsdangerous
+Flask-Mail
+requests
+pyyaml
+paramiko
+python-dotenv==0.19.1
