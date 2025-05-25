@@ -1,0 +1,556 @@
+"use client"
+
+import type React from "react"
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs"
+import { CheckCircle, Server, CloudCog } from "lucide-react"
+
+const serviceTemplates = [
+  {
+    id: "moodle",
+    name: "Moodle",
+    description: "Linux Ubuntu Cliente",
+    icon: Server,
+    specs: { cpu: 2, ram: 4, storage: 50 },
+    requiresPlaybook: true,
+  },
+  {
+    id: "dns",
+    name: "DNS Server",
+    description: "Windows Server",
+    icon: CloudCog,
+    specs: { cpu: 2, ram: 4, storage: 50 },
+    requiresPlaybook: true,
+  },
+  {
+    id: "supabase",
+    name: "Supabase",
+    description: "Linux Ubuntu Cliente",
+    icon: Server,
+    specs: { cpu: 4, ram: 8, storage: 100 },
+    requiresPlaybook: true,
+  },
+  {
+    id: "custom",
+    name: "Personalizado",
+    description: "Configura tu propia máquina virtual",
+    icon: Server,
+    specs: { cpu: 2, ram: 2, storage: 10 },
+    requiresPlaybook: false,
+  },
+]
+
+export default function CreateMachinePage() {
+  const router = useRouter()
+  const [step, setStep] = useState(1)
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null)
+  const [playbookRequired, setPlaybookRequired] = useState(false)
+  const [formData, setFormData] = useState({
+    name: "",
+    description: "",
+    cpu: 2,
+    ram: 2,
+    storage: 10,
+    os: "ubuntu",
+    osVersion: "24.04",
+    services: [] as string[],
+    additionalConfig: "",
+  })
+  const [isLoading, setIsLoading] = useState(false)
+  const [success, setSuccess] = useState(false)
+  const [formErrors, setFormErrors] = useState({
+    additionalConfig: "",
+  })
+
+  const handleTemplateSelect = (templateId: string) => {
+    setSelectedTemplate(templateId)
+    const template = serviceTemplates.find((t) => t.id === templateId)
+    if (template) {
+      setFormData({
+        ...formData,
+        cpu: template.specs.cpu,
+        ram: template.specs.ram,
+        storage: template.specs.storage,
+      })
+      setPlaybookRequired(template.requiresPlaybook)
+    }
+    setStep(2)
+  }
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target
+    setFormData({ ...formData, [name]: value })
+    if (name === "additionalConfig") {
+      setFormErrors({ ...formErrors, additionalConfig: "" })
+    }
+  }
+
+  const handleSelectChange = (name: string, value: string) => {
+    setFormData({ ...formData, [name]: value })
+  }
+
+  const handleServiceToggle = (service: string) => {
+    const services = formData.services.includes(service)
+      ? formData.services.filter((s) => s !== service)
+      : [...formData.services, service]
+    setFormData({ ...formData, services })
+  }
+
+  const validateForm = () => {
+    let valid = true
+    const errors = { ...formErrors }
+
+    if (playbookRequired && !formData.additionalConfig.trim()) {
+      errors.additionalConfig = "El playbook de Ansible es obligatorio para esta plantilla"
+      valid = false
+    } else {
+      errors.additionalConfig = ""
+    }
+
+    setFormErrors(errors)
+    return valid
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!validateForm()) return
+
+    setIsLoading(true)
+
+    try {
+      const response = await fetch("/api/create-machine", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      })
+
+      if (!response.ok) throw new Error("Error al crear la máquina virtual")
+
+      setSuccess(true)
+      setTimeout(() => router.push("/dashboard"), 2000)
+    } catch (error) {
+      console.error("Error creating machine:", error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  if (success) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12">
+        <div className="rounded-full bg-green-100 p-3 mb-4">
+          <CheckCircle className="h-8 w-8 text-green-600" />
+        </div>
+        <h2 className="text-2xl font-bold mb-2">¡Máquina creada con éxito!</h2>
+        <p className="text-muted-foreground mb-6 text-center">
+          Tu máquina virtual está siendo desplegada en Proxmox. Serás redirigido al dashboard en unos momentos.
+        </p>
+        <Button onClick={() => router.push("/dashboard")}>Ir al Dashboard</Button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-3xl font-bold tracking-tight">Crear Máquina Virtual</h2>
+        <p className="text-muted-foreground">
+          Configura y despliega una nueva máquina virtual en Proxmox con los servicios que necesites
+        </p>
+      </div>
+
+      {step === 1 && (
+        <div className="space-y-6">
+          <h3 className="text-xl font-semibold">Paso 1: Selecciona una plantilla</h3>
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+            {serviceTemplates.map((template) => (
+              <Card
+                key={template.id}
+                className={`cursor-pointer transition-all hover:border-primary ${
+                  selectedTemplate === template.id ? "border-2 border-primary" : ""
+                }`}
+                onClick={() => handleTemplateSelect(template.id)}
+              >
+                <CardContent className="p-6 flex flex-col items-center text-center">
+                  <div className="rounded-full bg-primary/10 p-3 mb-4">
+                    <template.icon className="h-6 w-6 text-primary" />
+                  </div>
+                  <CardTitle className="mb-2">{template.name}</CardTitle>
+                  <CardDescription>{template.description}</CardDescription>
+                  <div className="mt-4 text-sm">
+                    <p>{template.specs.cpu} vCPU</p>
+                    <p>{template.specs.ram}GB RAM</p>
+                    <p>{template.specs.storage}GB SSD</p>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {step === 2 && (
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <h3 className="text-xl font-semibold">Paso 2: Configura tu máquina virtual</h3>
+
+          <Tabs defaultValue="basic" className="space-y-6">
+            <TabsList>
+              <TabsTrigger value="basic">Información Básica</TabsTrigger>
+              <TabsTrigger value="resources">Recursos</TabsTrigger>
+              <TabsTrigger value="services">Servicios</TabsTrigger>
+              <TabsTrigger value="advanced">Configuración Avanzada</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="basic" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Información Básica</CardTitle>
+                  <CardDescription>Proporciona la información básica para tu máquina virtual</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Nombre de la máquina</Label>
+                    <Input id="name" name="name" placeholder="Mi Servidor Web" value={formData.name} onChange={handleInputChange} required />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="description">Descripción (opcional)</Label>
+                    <Textarea id="description" name="description" placeholder="Servidor web para mi aplicación" value={formData.description} onChange={handleInputChange} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="os">Sistema Operativo</Label>
+                      <Select value={formData.os} onValueChange={(value) => handleSelectChange("os", value)}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecciona un SO" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ubuntu">Ubuntu</SelectItem>
+                          <SelectItem value="debian">Debian</SelectItem>
+                          <SelectItem value="centos">CentOS</SelectItem>
+                          <SelectItem value="fedora">Fedora</SelectItem>
+                          <SelectItem value="windows">Windows Server</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="osVersion">Versión</Label>
+                      <Select value={formData.osVersion} onValueChange={(value) => handleSelectChange("osVersion", value)}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecciona una versión" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {formData.os === "windows" ? (
+                            <>
+                              <SelectItem value="2019">2019</SelectItem>
+                              <SelectItem value="2022">2022</SelectItem>
+                            </>
+                          ) : (
+                            <>
+                              <SelectItem value="24.04">24.04 LTS</SelectItem>
+                              <SelectItem value="22.04">22.04 LTS</SelectItem>
+                              <SelectItem value="20.04">20.04 LTS</SelectItem>
+                            </>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="resources" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Recursos</CardTitle>
+                  <CardDescription>Configura los recursos para tu máquina virtual</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="cpu">CPU (vCores)</Label>
+                    <div className="flex items-center space-x-4">
+                      <Input id="cpu" name="cpu" type="number" min="1" max="16" value={formData.cpu} onChange={handleInputChange} />
+                      <span className="text-sm text-muted-foreground">vCores</span>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="ram">Memoria RAM</Label>
+                    <div className="flex items-center space-x-4">
+                      <Input id="ram" name="ram" type="number" min="1" max="64" value={formData.ram} onChange={handleInputChange} />
+                      <span className="text-sm text-muted-foreground">GB</span>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="storage">Almacenamiento</Label>
+                    <div className="flex items-center space-x-4">
+                      <Input id="storage" name="storage" type="number" min="10" max="1000" value={formData.storage} onChange={handleInputChange} />
+                      <span className="text-sm text-muted-foreground">GB SSD</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="services" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Servicios</CardTitle>
+                  <CardDescription>Selecciona los servicios que deseas instalar en tu máquina virtual</CardDescription>
+                </CardHeader>
+                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {["Apache", "Nginx", "MySQL", "PostgreSQL", "MongoDB", "PHP", "Node.js", "Python", "Docker"].map((service) => (
+                    <div key={service} className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id={`service-${service}`}
+                        checked={formData.services.includes(service)}
+                        onChange={() => handleServiceToggle(service)}
+                        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                      />
+                      <Label htmlFor={`service-${service}`}>{service}</Label>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="advanced" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Configuración Avanzada</CardTitle>
+                  <CardDescription>Agrega configuración adicional con Ansible</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="additionalConfig">Playbook de Ansible</Label>
+                    <Textarea
+                      id="additionalConfig"
+                      name="additionalConfig"
+                      value={formData.additionalConfig}
+                      onChange={handleInputChange}
+                      placeholder="---\n- name: Instalar nginx\n  hosts: all\n  become: true\n  tasks:\n    - name: Instalar nginx\n      apt:\n        name: nginx\n        state: present"
+                    />
+                    {formErrors.additionalConfig && (
+                      <p className="text-sm text-red-600">{formErrors.additionalConfig}</p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+
+          <Button type="submit" disabled={isLoading}>
+            {isLoading ? "Creando..." : "Crear Máquina Virtual"}
+          </Button>
+        </form>
+      )}
+    </div>
+  )
+}
+
+
+
+
+    os_templates = {
+        "ubuntu": {
+            "24.04": "local:iso/ubuntu-desktop24.iso",
+            "22.04": "local:iso/ubuntu-20.04-server-amd64.iso",
+            "20.04": "local:iso/ubuntu-18.04-server-amd64.iso"
+        },
+        "debian": {
+            "11": "local:iso/debian-11-generic-amd64.iso",
+            "10": "local:iso/debian-10-generic-amd64.iso"
+        },
+        "centos": {
+            "8": "local:iso/CentOS-8-x86_64-1905-dvd1.iso",
+            "7": "local:iso/CentOS-7-x86_64-DVD-2009.iso"
+        },
+        "windows": {
+            "2019": "local:iso/windows2019.iso",
+            "2022": "local:iso/windows2022.iso"
+        }
+    }
+
+
+    
+@app.route("/api/create-machine", methods=["POST"])
+def create_machine():
+    try:
+        # Proxmox configuration
+        PROXMOX_HOST = os.environ.get('PROXMOX_HOST', '10.144.212.69')
+        SSH_USER = os.environ.get('SSH_USER', 'root')
+        SSH_PASSWORD = os.environ.get('SSH_PASSWORD', 'G@gant0nya1ex')
+        API_TOKEN_ID = os.environ.get('API_TOKEN_ID', 'admin@pam!admin')
+        API_TOKEN_SECRET = os.environ.get('API_TOKEN_SECRET', '20477125-29d4-4bd1-9e55-88cbc8456f21')
+        NODE_NAME = os.environ.get('NODE_NAME', 'ansidesk')
+        STORAGE_TARGET = os.environ.get('STORAGE_TARGET', 'local-lvm')
+
+        # OS image mapping
+        OS_IMAGE_MAPPING = {
+            'ubuntu-desktop': {
+                'filename': 'ubuntu2404.qcow2',
+                'path': '/var/lib/vz/images/ubuntu2404.qcow2',
+                'ostype': 'l26'
+            },
+            'ubuntu-server': {
+                'filename': 'ubuntu-server2004.qcow2',
+                'path': '/var/lib/vz/images/ubuntu-server2004.qcow2',
+                'ostype': 'l26'
+            },
+            'Windows 10': {
+                'filename': 'win10.qcow2',
+                'path': '/var/lib/vz/images/win10.qcow2',
+                'ostype': 'win10'
+            },
+            'windows': {
+                'filename': 'win-server2019.qcow2',
+                'path': '/var/lib/vz/images/win-server2019.qcow2',
+                'ostype': 'win10'
+            }
+        }
+        
+        # Get data from request
+        data = request.json
+        
+        # Required fields validation
+        required_fields = ['user_id', 'name', 'description', 'cpu', 'ram', 'storage', 'os']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({"error": f"Missing required field: {field}"}), 400
+        
+        # Extract fields from request
+        user_id = data['user_id']
+        name = data['name']
+        description = data['description']
+        cpu = int(data['cpu'])
+        ram = int(data['ram'])
+        storage = int(data['storage'])
+        os_type = data['os']
+        os_version = data.get('osVersion', '')  # Optional
+        
+        # Validate OS type
+        if os_type not in OS_IMAGE_MAPPING:
+            return jsonify({"error": f"Unsupported OS type: {os_type}"}), 400
+        
+        # Get OS image details
+        os_image = OS_IMAGE_MAPPING[os_type]
+        
+        # API headers
+        headers = {
+            "Authorization": f"PVEAPIToken={API_TOKEN_ID}={API_TOKEN_SECRET}",
+            "Content-Type": "application/json"
+        }
+        
+        base_url = f"https://{PROXMOX_HOST}:8006/api2/json"
+        
+        # Get next available VMID
+        vms_resp = requests.get(
+            f"{base_url}/nodes/{NODE_NAME}/qemu", 
+            headers=headers, 
+            verify=False
+        )
+        vms_resp.raise_for_status()
+        
+        existing_ids = [vm["vmid"] for vm in vms_resp.json()["data"]]
+        new_vmid = max(existing_ids) + 1 if existing_ids else 100
+        
+        # Create empty VM
+        create_params = {
+            "vmid": new_vmid,
+            "name": name,
+            "cores": cpu,
+            "memory": ram,
+            "net0": "virtio,bridge=vmbr0",
+            "scsihw": "virtio-scsi-single",
+        }
+        
+        create_resp = requests.post(
+            f"{base_url}/nodes/{NODE_NAME}/qemu",
+            headers=headers,
+            json=create_params,  # ojo, aquí no urlencode, sino json
+            verify=False
+        )
+        create_resp.raise_for_status()
+        
+        # Connect via SSH to import the disk
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh.connect(
+            hostname=PROXMOX_HOST,
+            username=SSH_USER,
+            password=SSH_PASSWORD,
+            port=22
+        )
+        
+        # Import disk command
+        import_cmd = f"qm importdisk {new_vmid} {os_image['path']} {STORAGE_TARGET}"
+        stdin, stdout, stderr = ssh.exec_command(import_cmd)
+        stderr_output = stderr.read().decode()
+        
+        if stderr_output and "warning" not in stderr_output.lower():
+            raise Exception(f"Error importing disk:\n{stderr_output}")
+
+        set_cmd = f"qm set {new_vmid} --scsihw virtio-scsi-single --scsi0 {STORAGE_TARGET}:vm-{new_vmid}-disk-0 --boot order=scsi0"
+        stdin, stdout, stderr = ssh.exec_command(set_cmd)
+        stderr_output = stderr.read().decode()
+
+        if stderr_output and "warning" not in stderr_output.lower():
+            raise Exception(f"Error al asignar disco:\n{stderr_output}")
+
+        ssh.close()
+        
+        # Save to database
+        cur = mysql.connection.cursor()
+        cur.execute("""
+            INSERT INTO machines (user_id, id, name, description, cpu, ram, storage, os, os_version)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (
+            user_id,
+            new_vmid,
+            name,
+            description,
+            cpu,
+            ram,
+            storage,
+            os_type,
+            os_version
+        ))
+        mysql.connection.commit()
+        cur.close()
+        
+        return jsonify({
+            "success": True,
+            "message": "VM created successfully with imported disk",
+            "vm_id": new_vmid
+        }), 200
+        
+    except requests.exceptions.RequestException as e:
+        return jsonify({"success": False, "error": f"API Error: {str(e)}"}), 500
+    except paramiko.SSHException as e:
+        return jsonify({"success": False, "error": f"SSH Error: {str(e)}"}), 500
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
